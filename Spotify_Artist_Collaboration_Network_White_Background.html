@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>Spotify Artist Collaboration Network</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+
+<style>
+
+  :root{
+
+    --bg:#ffffff; --panel:#f5f6f8; --line:#d9dde5; --text:#20242c; --muted:#626b78;
+
+    --pop:#e63946; --hiphop:#457b9d; --rnb:#f4a261; --edm:#2a9d8f; --rock:#6a4c93; --latin:#ffb703;
+
+  }
+
+  *{box-sizing:border-box;}
+
+  body{
+
+    margin:0; background:var(--bg); color:var(--text);
+
+    font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  }
+
+  .wrap{display:flex; flex-direction:column; height:100vh;}
+
+  header{
+
+    padding:18px 24px 12px; border-bottom:1px solid var(--line);
+
+    display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
+
+  }
+
+  h1{font-size:19px; margin:0; font-weight:600; letter-spacing:0.2px;}
+
+  .sub{color:var(--muted); font-size:13px;}
+
+  .body{display:flex; flex:1; min-height:0;}
+
+  .panel{
+
+    width:230px; padding:16px; border-right:1px solid var(--line);
+
+    overflow-y:auto; flex-shrink:0;
+
+  }
+
+  .panel h3{font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin:0 0 10px;}
+
+  .chip{
+
+    display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px;
+
+    cursor:pointer; font-size:13px; margin-bottom:2px; user-select:none;
+
+  }
+
+  .chip:hover{background:var(--panel);}
+
+  .chip.off{opacity:0.35;}
+
+  .dot{width:10px; height:10px; border-radius:50%; flex-shrink:0;}
+
+  .mode-toggle{display:flex; gap:6px; margin-top:14px;}
+
+  .mode-btn{
+
+    flex:1; background:var(--panel); border:1px solid var(--line); color:var(--text);
+
+    padding:7px 6px; font-size:12px; border-radius:6px; cursor:pointer;
+
+  }
+
+  .mode-btn.active{background:#e8edf5; border-color:#aeb8c8;}
+
+  #canvas{flex:1; position:relative;}
+
+  svg{width:100%; height:100%; display:block;}
+
+  .link{stroke:#aeb5c0; stroke-opacity:0.75;}
+
+  .node text{fill:var(--text); font-size:10px; pointer-events:none; font-weight:600;}
+
+  .node.dim{opacity:0.12;}
+
+  .link.dim{opacity:0.05;}
+
+  #tooltip{
+
+    position:absolute; pointer-events:none; background:var(--panel); border:1px solid var(--line);
+
+    padding:8px 10px; border-radius:6px; font-size:12px; opacity:0; transition:opacity 0.1s;
+
+    max-width:200px;
+
+  }
+
+  #tooltip b{display:block; margin-bottom:2px;}
+
+  #tooltip .muted{color:var(--muted);}
+
+  footer{padding:8px 24px; border-top:1px solid var(--line); color:var(--muted); font-size:11.5px;}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <header>
+
+    <h1>Spotify Artist Collaboration Network</h1>
+
+    <span class="sub">30 artists · 26 collaborations — drag nodes, hover for detail, click a node to isolate its ego-network</span>
+
+  </header>
+
+  <div class="body">
+
+    <div class="panel">
+
+      <h3>Genre</h3>
+
+      <div id="legend"></div>
+
+      <div class="mode-toggle">
+
+        <button class="mode-btn active" data-mode="genre">Genre color</button>
+
+        <button class="mode-btn" data-mode="community">Detected cluster</button>
+
+      </div>
+
+      <h3 style="margin-top:20px;">Reading the graph</h3>
+
+      <div class="sub" style="line-height:1.5;">
+
+        Node size = degree (collaboration count). Isolated / low-degree artists sit at the edges — a direct view of graph-theory concepts like pendent and isolated vertices.
+
+      </div>
+
+    </div>
+
+    <div id="canvas">
+
+      <svg></svg>
+
+      <div id="tooltip"></div>
+
+    </div>
+
+  </div>
+
+  <footer>DSE3151 Graph Visualization · Visual mapping: color = genre/cluster (Gestalt similarity), position = force-directed proximity (Gestalt proximity), size = degree centrality</footer>
+
+</div>
+
+
+
+<script>
+
+const data = {"nodes": [{"id": "Taylor Swift", "genre": "Pop", "degree": 1, "community": 2}, {"id": "Ed Sheeran", "genre": "Pop", "degree": 2, "community": 2}, {"id": "Justin Bieber", "genre": "Pop", "degree": 2, "community": 2}, {"id": "Dua Lipa", "genre": "Pop", "degree": 1, "community": 0}, {"id": "Selena Gomez", "genre": "Pop", "degree": 3, "community": 4}, {"id": "Ariana Grande", "genre": "Pop", "degree": 2, "community": 0}, {"id": "Sia", "genre": "Pop", "degree": 1, "community": 2}, {"id": "Drake", "genre": "Hip-Hop", "degree": 4, "community": 1}, {"id": "Kendrick Lamar", "genre": "Hip-Hop", "degree": 3, "community": 1}, {"id": "Travis Scott", "genre": "Hip-Hop", "degree": 2, "community": 1}, {"id": "Post Malone", "genre": "Hip-Hop", "degree": 1, "community": 1}, {"id": "Cardi B", "genre": "Hip-Hop", "degree": 3, "community": 3}, {"id": "Nicki Minaj", "genre": "Hip-Hop", "degree": 3, "community": 0}, {"id": "Eminem", "genre": "Hip-Hop", "degree": 2, "community": 0}, {"id": "Jay-Z", "genre": "Hip-Hop", "degree": 1, "community": 5}, {"id": "The Weeknd", "genre": "R&B", "degree": 1, "community": 0}, {"id": "SZA", "genre": "R&B", "degree": 1, "community": 1}, {"id": "Beyonce", "genre": "R&B", "degree": 1, "community": 5}, {"id": "Rihanna", "genre": "R&B", "degree": 3, "community": 0}, {"id": "Bruno Mars", "genre": "R&B", "degree": 1, "community": 3}, {"id": "Calvin Harris", "genre": "EDM", "degree": 2, "community": 0}, {"id": "David Guetta", "genre": "EDM", "degree": 2, "community": 2}, {"id": "Marshmello", "genre": "EDM", "degree": 1, "community": 4}, {"id": "Zedd", "genre": "EDM", "degree": 1, "community": 4}, {"id": "Kygo", "genre": "EDM", "degree": 1, "community": 4}, {"id": "Imagine Dragons", "genre": "Rock", "degree": 1, "community": 1}, {"id": "Twenty One Pilots", "genre": "Rock", "degree": 0, "community": 6}, {"id": "Bad Bunny", "genre": "Latin", "degree": 3, "community": 3}, {"id": "J Balvin", "genre": "Latin", "degree": 2, "community": 3}, {"id": "Karol G", "genre": "Latin", "degree": 1, "community": 3}], "links": [{"source": "Taylor Swift", "target": "Ed Sheeran"}, {"source": "Ed Sheeran", "target": "Justin Bieber"}, {"source": "Justin Bieber", "target": "David Guetta"}, {"source": "Dua Lipa", "target": "Calvin Harris"}, {"source": "Selena Gomez", "target": "Marshmello"}, {"source": "Selena Gomez", "target": "Zedd"}, {"source": "Selena Gomez", "target": "Kygo"}, {"source": "Ariana Grande", "target": "The Weeknd"}, {"source": "Ariana Grande", "target": "Nicki Minaj"}, {"source": "Sia", "target": "David Guetta"}, {"source": "Drake", "target": "Rihanna"}, {"source": "Drake", "target": "Kendrick Lamar"}, {"source": "Drake", "target": "Travis Scott"}, {"source": "Drake", "target": "Bad Bunny"}, {"source": "Kendrick Lamar", "target": "SZA"}, {"source": "Kendrick Lamar", "target": "Imagine Dragons"}, {"source": "Travis Scott", "target": "Post Malone"}, {"source": "Cardi B", "target": "Nicki Minaj"}, {"source": "Cardi B", "target": "Bruno Mars"}, {"source": "Cardi B", "target": "Bad Bunny"}, {"source": "Nicki Minaj", "target": "Eminem"}, {"source": "Eminem", "target": "Rihanna"}, {"source": "Jay-Z", "target": "Beyonce"}, {"source": "Rihanna", "target": "Calvin Harris"}, {"source": "Bad Bunny", "target": "J Balvin"}, {"source": "J Balvin", "target": "Karol G"}], "palette": {"Pop": "#e63946", "Hip-Hop": "#457b9d", "R&B": "#f4a261", "EDM": "#2a9d8f", "Rock": "#6a4c93", "Latin": "#ffb703"}};
+
+
+
+const communityPalette = d3.schemeTableau10;
+
+let colorMode = "genre";
+
+
+
+const svg = d3.select("svg");
+
+const canvas = document.getElementById("canvas");
+
+const tooltip = d3.select("#tooltip");
+
+let width = canvas.clientWidth, height = canvas.clientHeight;
+
+
+
+const g = svg.append("g");
+
+svg.call(d3.zoom().scaleExtent([0.3, 4]).on("zoom", (ev) => g.attr("transform", ev.transform)));
+
+
+
+const nodeById = new Map(data.nodes.map(d => [d.id, d]));
+
+const linksData = data.links.map(l => ({source: l.source, target: l.target}));
+
+const neighbors = new Map(data.nodes.map(d => [d.id, new Set([d.id])]));
+
+linksData.forEach(l => { neighbors.get(l.source).add(l.target); neighbors.get(l.target).add(l.source); });
+
+
+
+const sizeScale = d3.scaleSqrt().domain([0, d3.max(data.nodes, d => d.degree) || 1]).range([9, 26]);
+
+
+
+const sim = d3.forceSimulation(data.nodes)
+
+  .force("link", d3.forceLink(linksData).id(d => d.id).distance(85).strength(0.5))
+
+  .force("charge", d3.forceManyBody().strength(-220))
+
+  .force("center", d3.forceCenter(width/2, height/2))
+
+  .force("collide", d3.forceCollide().radius(d => sizeScale(d.degree) + 14));
+
+
+
+const link = g.append("g").selectAll("line")
+
+  .data(linksData).join("line").attr("class", "link").attr("stroke-width", 1.4);
+
+
+
+const node = g.append("g").selectAll("g")
+
+  .data(data.nodes).join("g").attr("class", "node")
+
+  .call(d3.drag()
+
+    .on("start", (ev,d) => { if(!ev.active) sim.alphaTarget(0.25).restart(); d.fx=d.x; d.fy=d.y; })
+
+    .on("drag", (ev,d) => { d.fx=ev.x; d.fy=ev.y; })
+
+    .on("end", (ev,d) => { if(!ev.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }));
+
+
+
+node.append("circle")
+
+  .attr("r", d => sizeScale(d.degree))
+
+  .attr("stroke", "#ffffff").attr("stroke-width", 1.5);
+
+
+
+node.append("text")
+
+  .attr("dy", d => -sizeScale(d.degree) - 6)
+
+  .attr("text-anchor", "middle")
+
+  .text(d => d.id);
+
+
+
+function colorFor(d){
+
+  if(colorMode === "genre") return data.palette[d.genre];
+
+  return communityPalette[d.community % 10];
+
+}
+
+function paint(){ node.select("circle").attr("fill", colorFor); }
+
+paint();
+
+
+
+node.on("mouseover", (ev,d) => {
+
+    tooltip.style("opacity",1)
+
+      .html(`<b>${d.id}</b><span class="muted">${d.genre} · ${d.degree} collaboration${d.degree===1?"":"s"}</span>`);
+
+  })
+
+  .on("mousemove", (ev) => {
+
+    const r = canvas.getBoundingClientRect();
+
+    tooltip.style("left", (ev.clientX - r.left + 14) + "px").style("top", (ev.clientY - r.top + 10) + "px");
+
+  })
+
+  .on("mouseout", () => tooltip.style("opacity",0));
+
+
+
+let isolated = null;
+
+node.on("click", (ev,d) => {
+
+  isolated = (isolated === d.id) ? null : d.id;
+
+  if(isolated){
+
+    const keep = neighbors.get(isolated);
+
+    node.classed("dim", n => !keep.has(n.id));
+
+    link.classed("dim", l => !(keep.has(l.source.id) && keep.has(l.target.id)));
+
+  } else {
+
+    node.classed("dim", false); link.classed("dim", false);
+
+  }
+
+});
+
+
+
+sim.on("tick", () => {
+
+  link.attr("x1", d=>d.source.x).attr("y1", d=>d.source.y)
+
+      .attr("x2", d=>d.target.x).attr("y2", d=>d.target.y);
+
+  node.attr("transform", d => `translate(${d.x},${d.y})`);
+
+});
+
+
+
+// Legend + genre filter
+
+const activeGenres = new Set(Object.keys(data.palette));
+
+const legend = d3.select("#legend");
+
+Object.entries(data.palette).forEach(([genre,color]) => {
+
+  const chip = legend.append("div").attr("class","chip").on("click", () => {
+
+    if(activeGenres.has(genre)) activeGenres.delete(genre); else activeGenres.add(genre);
+
+    chip.classed("off", !activeGenres.has(genre));
+
+    node.classed("dim", d => !activeGenres.has(d.genre));
+
+    link.classed("dim", l => !activeGenres.has(l.source.genre) || !activeGenres.has(l.target.genre));
+
+  });
+
+  chip.append("div").attr("class","dot").style("background", color);
+
+  chip.append("div").text(genre);
+
+});
+
+
+
+document.querySelectorAll(".mode-btn").forEach(btn => {
+
+  btn.addEventListener("click", () => {
+
+    document.querySelectorAll(".mode-btn").forEach(b=>b.classList.remove("active"));
+
+    btn.classList.add("active");
+
+    colorMode = btn.dataset.mode;
+
+    paint();
+
+  });
+
+});
+
+
+
+window.addEventListener("resize", () => {
+
+  width = canvas.clientWidth; height = canvas.clientHeight;
+
+  sim.force("center", d3.forceCenter(width/2, height/2)); sim.alpha(0.3).restart();
+
+});
+
+</script>
+
+</body>
+
+</html>

@@ -1,0 +1,10 @@
+Metric,Value
+Vertices (artists),30.0
+Edges (collaborations),26.0
+Isolated vertices,1.0
+Pendent vertices,14.0
+Average degree,1.73
+Density,0.06
+Connected components,5.0
+Detected communities,7.0
+Complement graph edges,409.0
